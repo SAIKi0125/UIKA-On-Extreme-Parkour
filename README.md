@@ -1,69 +1,70 @@
-# UIKA on Extreme Parkour
+# UIKA 在 Extreme Parkour 上的训练与测试说明
 
-This repository is a customized version of `extreme-parkour` for the UIKA quadruped.
+本仓库是在 `extreme-parkour` 基础上，为 UIKA 四足机器人做的适配版本。
 
-## What Is Included
+## 仓库里包含什么
 
-- UIKA robot asset and URDF integration
-- UIKA task config: `legged_gym/legged_gym/envs/uika/uika_parkour_config.py`
-- Flat-ground training script: `legged_gym/legged_gym/scripts/train_uika_flat.py`
-- Flat-ground play script: `legged_gym/legged_gym/scripts/play_uika_flat.py`
-- URDF and contact diagnostics:
+- UIKA 机器人资源与 URDF 适配
+- UIKA 任务配置：`legged_gym/legged_gym/envs/uika/uika_parkour_config.py`
+- 平地训练脚本：`legged_gym/legged_gym/scripts/train_uika_flat.py`
+- 平地测试脚本：`legged_gym/legged_gym/scripts/play_uika_flat.py`
+- 诊断脚本：
   - `legged_gym/legged_gym/scripts/check_uika_urdf.py`
   - `legged_gym/legged_gym/scripts/play_test.py`
   - `legged_gym/legged_gym/scripts/urdf_play_test.py`
 
-## Environment Setup
+## 环境安装
 
-Use the exported conda environment:
+推荐直接使用导出的 conda 环境：
 
 ```bash
 conda env create -f requirements/conda/parkour.yml
 conda activate parkour
 ```
 
-Minimal pip requirements are also available in:
+精简 pip 依赖文件：
 
 ```bash
 requirements/parkour-requirements.txt
 ```
 
-## Training
+## 训练流程
 
-### 1. Flat-ground pretraining (recommended first step)
+### 1）先做平地预训练（推荐）
 
 ```bash
 cd legged_gym/legged_gym/scripts
 python train_uika_flat.py --task uika --proj_name parkour_flat --exptid uika-flat-001 --num_envs 2048
 ```
 
-### 2. Continue training on normal terrain
+### 2）在正常地形继续训练
 
 ```bash
 cd legged_gym/legged_gym/scripts
 python train.py --task uika --proj_name parkour_flat --exptid uika-rough-001 --resume --resumeid uika-flat-001 --num_envs 2048
 ```
 
-## Playback / Evaluation
+## 测试与可视化
 
-### Flat-ground policy playback
+### 平地策略回放
 
 ```bash
 cd legged_gym/legged_gym/scripts
 python play_uika_flat.py --task uika --proj_name parkour_flat --exptid uika-flat-001 --checkpoint 300
 ```
 
-### URDF standing/contact check
+### URDF 站立与接触检查
 
 ```bash
 cd legged_gym/legged_gym/scripts
 python check_uika_urdf.py --task uika --headless --num_envs 1
 ```
 
-## Useful Notes
+## 常见问题
 
-- Use `--proj_name` and `--exptid` consistently between train/play, otherwise checkpoint loading will fail.
-- If `play.py` or `train.py` cannot find models, verify the path under `legged_gym/logs/<proj_name>/<exptid>/`.
-- For GitHub remote:
-  - `origin`: your own repo
-  - `upstream`: original `extreme-parkour` repo
+- `play/train` 找不到模型：
+  请检查 `--proj_name` 与 `--exptid` 是否和训练时一致，模型路径应在 `legged_gym/logs/<proj_name>/<exptid>/` 下。
+
+- 远程仓库说明：
+  - `origin`：你自己的 GitHub 仓库
+  - `upstream`：原始 `extreme-parkour` 仓库
