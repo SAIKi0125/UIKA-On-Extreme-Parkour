@@ -230,7 +230,6 @@ class LeggedRobot(BaseTask):
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
-        self.gym.refresh_force_sensor_tensor(self.sim)
 
         self.episode_length_buf += 1
         self.common_step_counter += 1
@@ -703,13 +702,11 @@ class LeggedRobot(BaseTask):
         actor_root_state = self.gym.acquire_actor_root_state_tensor(self.sim)
         dof_state_tensor = self.gym.acquire_dof_state_tensor(self.sim)
         net_contact_forces = self.gym.acquire_net_contact_force_tensor(self.sim)
-        force_sensor_tensor = self.gym.acquire_force_sensor_tensor(self.sim)
         rigid_body_state_tensor = self.gym.acquire_rigid_body_state_tensor(self.sim)
         self.gym.refresh_dof_state_tensor(self.sim)
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
-        self.gym.refresh_force_sensor_tensor(self.sim)
             
         # create some wrapper tensors for different slices
         self.root_states = gymtorch.wrap_tensor(actor_root_state)
@@ -718,8 +715,8 @@ class LeggedRobot(BaseTask):
         self.dof_pos = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 0]
         self.dof_vel = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 1]
         self.base_quat = self.root_states[:, 3:7]
+        self.force_sensor_tensor = torch.zeros(self.num_envs, 4, 6, dtype=torch.float, device=self.device, requires_grad=False)
 
-        self.force_sensor_tensor = gymtorch.wrap_tensor(force_sensor_tensor).view(self.num_envs, 4, 6) # for feet only, see create_env()
         self.contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3) # shape: num_envs, num_bodies, xyz axis
 
         # initialize some data used later on
@@ -930,10 +927,6 @@ class LeggedRobot(BaseTask):
         feet_names = [s for s in body_names if self.cfg.asset.foot_name in s]
 
 
-        for s in ["FR_foot", "FL_foot", "RR_foot", "RL_foot"]:
-            feet_idx = self.gym.find_asset_rigid_body_index(robot_asset, s)
-            sensor_pose = gymapi.Transform(gymapi.Vec3(0.0, 0.0, 0.0))
-            self.gym.create_asset_force_sensor(robot_asset, feet_idx, sensor_pose)
         
         penalized_contact_names = []
         for name in self.cfg.asset.penalize_contacts_on:

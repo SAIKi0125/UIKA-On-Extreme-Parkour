@@ -66,7 +66,7 @@ def play(args):
     # override some parameters for testing
     if args.nodelay:
         env_cfg.domain_rand.action_delay_view = 0
-    env_cfg.env.num_envs = 16 if not args.save else 64
+    env_cfg.env.num_envs = 4 if not args.save else 64
     env_cfg.env.episode_length_s = 60
     env_cfg.commands.resampling_time = 60
     env_cfg.terrain.num_rows = 5
@@ -175,7 +175,6 @@ def play(args):
               "actual vx", env.base_lin_vel[env.lookat_id, 0].item(), )
         
         id = env.lookat_id
-        
 
 if __name__ == '__main__':
     EXPORT_POLICY = False
