@@ -165,8 +165,8 @@ class LeggedRobotCfg(BaseConfig):
         selected = False # select a unique terrain type and pass all arguments
         terrain_kwargs = None # Dict of arguments for selected terrain
         max_init_terrain_level = 5 # starting curriculum state
-        terrain_length = 10.
-        terrain_width = 10
+        terrain_length = 5.
+        terrain_width = 5
         num_rows= 10 # number of terrain rows (levels)  # spreaded is benifitiall !
         num_cols = 40 # number of terrain cols (types)
         
@@ -190,7 +190,10 @@ class LeggedRobotCfg(BaseConfig):
                         "parkour_step": 0.0,
                         "parkour_gap": 0.0,
                         "demo": 0.0,
-                        "T_step_stl": 1.0}
+                        "T_step_stl": 0.25,
+                        "Slope": 0.25,
+                        "BridgeA": 0.25,
+                        "BridgeB": 0.25,}
         terrain_proportions = list(terrain_dict.values())
         
         # trimesh only:

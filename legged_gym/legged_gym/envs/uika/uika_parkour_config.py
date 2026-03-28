@@ -39,11 +39,14 @@ class UIKAParkourCfg(LeggedRobotCfg):
         action_scale = 0.25
         decimation = 4
 
+    class env(LeggedRobotCfg.env):
+        include_foot_contacts = False
+
     class asset(LeggedRobotCfg.asset):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/uika/urdf/uika.urdf'
         foot_name = 'foot'
-        penalize_contacts_on = ['thigh', 'calf', 'base']
-        terminate_after_contacts_on = ['base']
+        penalize_contacts_on = []
+        terminate_after_contacts_on = []
         self_collisions = 1
         collapse_fixed_joints = False
 
