@@ -76,3 +76,25 @@
   - `play.py --web` 更适合查看效果
   - 训练脚本默认强制 headless，不是主要可视化入口
 
+
+## 10. 额外协作约定（2026-03-28）
+- 当你问“在哪”“哪一行”“定义在哪里”这类问题时，我后续统一给出精确行号。
+- 回答文件位置时，优先给出具体文件路径与 1-based 行号，避免只说文件名。
+
+## 11. 今日会话记录（2026-03-28）
+- 你集中排查了自定义 STL 地形接入后的尺寸、缩放、限位与可视化问题。
+- 我解释并定位了 `terrain_length`、`terrain_width`、`horizontal_scale` 对目标网格尺寸的影响，说明了当前逻辑是把整张 heightmap 缩放到子地形画布，而不是只按障碍本体尺寸缩放。
+- 你要求以后涉及“位置/定义在哪里”的回答必须附带精确行号，我已记录为后续固定约定。
+- 我修过一次 `parkour_terrain()` 中的切片赋值越界问题，随后又按你的要求回退该局部修改。
+- 我修过一次 `stl_heightmap_terrain()` 在 fallback 分支中 `scale_factor_height/scale_factor_width` 未定义的问题，随后也按你的要求回退该局部修改。
+- 你确认当前高程图目录为 `legged_gym/terrain_assets/height_maps`，我已将 `terrain.py` 里相关 heightmap 路径统一改到这一目录。
+- 你要求把 STL 地形放在平地画布上，并按真实尺寸控制障碍本体占用范围；我为 `T_step`、`Slope`、`BridgeA`、`BridgeB` 增加了 `real_length_m` 与 `real_width_m` 配置入口。
+- 你要求检查高程图本身是否正确；我实际读取了四张 `.npy`，结论如下：
+  - `T_step.npy`：`250x250`，非零占用约 `1.88m x 2.80m`，高度 `0.0~0.4m`，中心在画布中部。
+  - `Slope.npy`：`250x250`，非零占用约 `4.0m x 2.0m`，高度 `0.0~0.188m`，中心在画布中部。
+  - `BridgeA.npy`：`250x250`，非零占用约 `3.72m x 1.80m`，高度 `0.0~0.2m`，中心在画布中部。
+  - `BridgeB.npy`：`250x250`，非零占用约 `3.48m x 1.80m`，高度 `0.0~0.2m`，中心略有偏移，不在严格正中。
+- 我解释了一个关键结论：如果代码继续按整张 `250x250` 高程图缩放，那么真实尺寸应填 `5.0m x 5.0m`；如果要按障碍本体真实尺寸缩放，则必须改成按高程图非零区域 bbox 缩放，而不是按整张图缩放。
+- 你展示了“正确地形”和“当前地形”的对比图；我解释了当前失真主要来自 `heightmap -> height_field -> trimesh` 这条链路会把台阶侧壁近似成斜面，而不是 mesh 几何本体未对齐。
+- 你要求保留训练所需的高程图；我说明训练观测使用的 heightmap 与物理碰撞使用的 mesh 可以解耦，但当前工程仍主要基于 heightfield/trimesh 链路。
+- 你要求检查 `verify_functions.py` 与 `generate_heightmap.py`；我已将 `verify_functions.py` 改为以高程图为基准去对齐 STL mesh，而不是反过来拿 mesh 作为真值源。

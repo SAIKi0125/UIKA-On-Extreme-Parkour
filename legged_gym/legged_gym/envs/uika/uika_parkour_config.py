@@ -13,10 +13,10 @@ class UIKAParkourCfg(LeggedRobotCfg):
             'FR_calf_joint': -0.7,
             'RL_hip_joint': 0.7,
             'RL_thigh_joint': 0.2,
-            'RL_calf_joint': 0.65,
+            'RL_calf_joint': 0.7,
             'RR_hip_joint': -0.7,
             'RR_thigh_joint': -0.2,
-            'RR_calf_joint': -0.65,
+            'RR_calf_joint': -0.7,
 
             # 'FL_hip_joint': -0.76,
             # 'FL_thigh_joint': 0.14,

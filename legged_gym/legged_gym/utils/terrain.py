@@ -32,15 +32,66 @@ import numpy as np
 from numpy.random import choice
 from scipy import interpolate
 import random
+import os
 from isaacgym import terrain_utils
 from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg
 from scipy import ndimage
 from pydelatin import Delatin
 import pyfqmr
 from scipy.ndimage import binary_dilation
-
+import trimesh
 
 class Terrain:
+    # STL 地形配置映射表
+    # 格式: "地形名称": {
+    #     "heightmap_path": "heightmap.npy文件路径",
+    #     "display_name": "显示名称",
+    #     "goals": [(x1, y1), (x2, y2), ...]  # 可选：目标点列表（直接使用height_map文件中的像素坐标）
+    # }
+    # 
+    # goals 坐标说明：
+    # - 在 STL_TERRAIN_CONFIG 中指定的坐标是 height_map.npy 文件本身的像素坐标
+    # - 这些坐标会自动转换为最终的物理坐标（米）
+    # - 坐标格式: (row, col) 或 (y, x)，对应 height_map 的第0维和第1维
+    #
+    # 注意：路径是相对于项目根目录（extreme-parkour）的相对路径
+    STL_TERRAIN_CONFIG = {
+        "T_step_stl": {
+            "heightmap_path": "legged_gym/terrain_assets/height_maps/T_step.npy",
+            "display_name": "T_step",
+            "real_length_m": 5,
+            "real_width_m": 5,
+            "goals": [(80, 125),(100,125),(120,125),(130,125),(150,155),(150,175),(150,190),(150,200)]  # 在此添加目标点坐标（height_map的像素坐标），不指定时为空
+        },
+        "Slope": {
+            "heightmap_path": "legged_gym/terrain_assets/height_maps/Slope.npy",
+            "display_name": "Slope",
+            "real_length_m": 5,
+            "real_width_m": 5,
+            "goals": [(55,124),(95,124),(125,124),(150,124),(170,124),(190,124),(200,124),(235,124)]
+        },
+        "BridgeA": {
+            "heightmap_path": "legged_gym/terrain_assets/height_maps/BridgeA.npy",
+            "display_name": "BridgeA",
+            "real_length_m": 5,
+            "real_width_m": 5,
+            "goals": [(65,100),(95,100),(125,100),(150,100),(180,100),(210,100),(230,100),(235,140)]
+        },
+        "BridgeB": {
+            "heightmap_path": "legged_gym/terrain_assets/height_maps/BridgeB.npy",
+            "display_name": "BridgeB",
+            "real_length_m": 5,
+            "real_width_m": 5,
+            "goals": [(70,106),(110,106),(145,106),(155,106),(165,106),(175,106),(185,106),(195,106)]
+        },
+        # 添加更多 STL 地形配置示例：
+        # "my_custom_terrain": {
+        #     "heightmap_path": "legged_gym/terrain_assets/my_custom_terrain_heightmap.npy",
+        #     "display_name": "My Custom Terrain",
+        #     "goals": [(50, 40), (100, 40), (150, 40)]  # height_map 中的像素坐标
+        # },
+    }
+    
     def __init__(self, cfg: LeggedRobotCfg.terrain, num_robots) -> None:
         self.cfg = cfg
         self.num_robots = num_robots
@@ -67,6 +118,7 @@ class Terrain:
         self.tot_rows = int(cfg.num_rows * self.length_per_env_pixels) + 2 * self.border
 
         self.height_field_raw = np.zeros((self.tot_rows , self.tot_cols), dtype=np.int16)
+        self.x_edge_mask = np.zeros((self.tot_rows, self.tot_cols), dtype=bool)
         if cfg.curriculum:
             self.curiculum()
         elif cfg.selected:
@@ -81,6 +133,14 @@ class Terrain:
         self.heightsamples = self.height_field_raw
         if self.type=="trimesh":
             print("Converting heightmap to trimesh...")
+            print(f"  Height field shape: {self.height_field_raw.shape}")
+            print(f"  Height field min/max: {self.height_field_raw.min()}/{self.height_field_raw.max()}")
+            print(f"  HF2mesh method: {cfg.hf2mesh_method}")
+            print(f"  Horizontal scale: {self.cfg.horizontal_scale}, Vertical scale: {self.cfg.vertical_scale}")
+            if cfg.hf2mesh_method == "grid":
+                print(f"  Slope threshold: {self.cfg.slope_treshold}")
+            else:
+                print(f"  Max error: {cfg.max_error}")
             if cfg.hf2mesh_method == "grid":
                 self.vertices, self.triangles, self.x_edge_mask = convert_heightfield_to_trimesh(   self.height_field_raw,
                                                                                                 self.cfg.horizontal_scale,
@@ -99,9 +159,63 @@ class Terrain:
                     self.triangles = self.triangles.astype(np.uint32)
             else:
                 assert cfg.hf2mesh_method == "fast", "Height field to mesh method must be grid or fast"
+                print(f"Converting heightfield to trimesh...")
+                print(f"  Height field shape: {self.height_field_raw.shape}")
+                print(f"  Height field min/max: {self.height_field_raw.min()}/{self.height_field_raw.max()}")
+                print(f"  Horizontal scale: {self.cfg.horizontal_scale}, Vertical scale: {self.cfg.vertical_scale}")
+                print(f"  Max error: {cfg.max_error}")
                 self.vertices, self.triangles = convert_heightfield_to_trimesh_delatin(self.height_field_raw, self.cfg.horizontal_scale, self.cfg.vertical_scale, max_error=cfg.max_error)
             print("Created {} vertices".format(self.vertices.shape[0]))
             print("Created {} triangles".format(self.triangles.shape[0]))
+        elif self.type == "mesh_heightmap":
+            print("Loading STL mesh terrain...")
+            print(f"  Terrain size: {self.env_length}m x {self.env_width}m")
+            
+            # 检查配置中是否指定了 STL 文件路径
+            if hasattr(cfg, 'stl_path') and cfg.stl_path is not None:
+                stl_path = cfg.stl_path
+            else:
+                # 默认路径
+                stl_path = "legged_gym/terrain_assets/T_step.STL"
+                print(f"  Warning: STL path not specified, using default: {stl_path}")
+            
+            # 检查配置中是否指定了 heightmap 文件路径
+            if hasattr(cfg, 'heightmap_path') and cfg.heightmap_path is not None:
+                heightmap_path = cfg.heightmap_path
+            else:
+                # 默认路径
+                heightmap_path = "legged_gym/terrain_assets/heightmap.npy"
+                print(f"  Warning: Heightmap path not specified, using default: {heightmap_path}")
+            
+            # 加载 STL mesh
+            self.vertices, self.triangles = load_stl_mesh(
+                stl_path=stl_path,
+                terrain_size=max(self.env_length, self.env_width),
+                center_to_terrain=True
+            )
+            
+            # 加载 heightmap 用于观测
+            try:
+                self.height_field_raw = load_heightmap(
+                    heightmap_path=heightmap_path,
+                    horizontal_scale=self.cfg.horizontal_scale,
+                    vertical_scale=self.cfg.vertical_scale
+                )
+                self.heightsamples = self.height_field_raw
+            except FileNotFoundError:
+                print(f"  Warning: Heightmap file not found at {heightmap_path}")
+                print(f"  Please run generate_heightmap.py to create the heightmap file")
+                # 使用零高度场作为后备
+                self.height_field_raw = np.zeros((self.tot_rows, self.tot_cols), dtype=np.int16)
+                self.heightsamples = self.height_field_raw
+            
+            # 设置环境原点
+            for i in range(self.cfg.num_rows):
+                for j in range(self.cfg.num_cols):
+                    env_origin_x = i * self.env_length
+                    env_origin_y = j * self.env_width
+                    env_origin_z = 0.0
+                    self.env_origins[i, j] = [env_origin_x, env_origin_y, env_origin_z]
 
     def randomized_terrain(self):
         for k in range(self.cfg.num_sub_terrains):
@@ -115,10 +229,16 @@ class Terrain:
             self.add_terrain_to_map(terrain, i, j)
         
     def curiculum(self, random=False, max_difficulty=False):
+        print(f"curriculum called: random={random}, max_difficulty={max_difficulty}")
+        print(f"  num_rows={self.cfg.num_rows}, num_cols={self.cfg.num_cols}")
         for j in range(self.cfg.num_cols):
             for i in range(self.cfg.num_rows):
-                difficulty = i / (self.cfg.num_rows-1)
-                choice = j / self.cfg.num_cols + 0.001
+                # 避免除零错误
+                if self.cfg.num_rows > 1:
+                    difficulty = i / (self.cfg.num_rows-1)
+                else:
+                    difficulty = 0.5
+                choice = j / self.cfg.num_cols + 0.001 if self.cfg.num_cols > 0 else 0.5
                 if random:
                     if max_difficulty:
                         terrain = self.make_terrain(choice, np.random.uniform(0.7, 1))
@@ -321,6 +441,87 @@ class Terrain:
             idx = 20
             demo_terrain(terrain)
             self.add_roughness(terrain)
+        elif choice < self.proportions[20]:
+            idx = 21
+            # 从配置映射表中获取 T_step_stl 地形配置
+            stl_config = self.STL_TERRAIN_CONFIG.get("T_step_stl")
+            if stl_config:
+                stl_heightmap_terrain(
+                    terrain,
+                    terrain_name=stl_config["display_name"],
+                    stl_heightmap_path=stl_config["heightmap_path"],
+                    goal_positions=stl_config.get("goals", None),
+                    real_length_m=stl_config.get("real_length_m", None),
+                    real_width_m=stl_config.get("real_width_m", None)
+                )
+            else:
+                print(f"Warning: T_step_stl terrain config not found, using flat terrain")
+                terrain.height_field_raw[:, :] = 0
+        elif choice < self.proportions[21]:
+            idx = 22
+            # 从配置映射表中获取 Slope 地形配置
+            stl_config = self.STL_TERRAIN_CONFIG.get("Slope")
+            if stl_config:
+                stl_heightmap_terrain(
+                    terrain,
+                    terrain_name=stl_config["display_name"],
+                    stl_heightmap_path=stl_config["heightmap_path"],
+                    goal_positions=stl_config.get("goals", None),
+                    real_length_m=stl_config.get("real_length_m", None),
+                    real_width_m=stl_config.get("real_width_m", None)
+                )
+            else:
+                print(f"Warning: Slope terrain config not found, using flat terrain")
+                terrain.height_field_raw[:, :] = 0
+        elif choice < self.proportions[22]:
+            idx = 23
+            # 从配置映射表中获取 BridgeA 地形配置
+            stl_config = self.STL_TERRAIN_CONFIG.get("BridgeA")
+            if stl_config:
+                stl_heightmap_terrain(
+                    terrain,
+                    terrain_name=stl_config["display_name"],
+                    stl_heightmap_path=stl_config["heightmap_path"],
+                    goal_positions=stl_config.get("goals", None),
+                    real_length_m=stl_config.get("real_length_m", None),
+                    real_width_m=stl_config.get("real_width_m", None)
+                )
+            else:
+                print(f"Warning: BridgeA terrain config not found, using flat terrain")
+                terrain.height_field_raw[:, :] = 0
+        elif choice < self.proportions[23]:
+            idx = 24
+            # 从配置映射表中获取 BridgeB 地形配置
+            stl_config = self.STL_TERRAIN_CONFIG.get("BridgeB")
+            if stl_config:
+                stl_heightmap_terrain(
+                    terrain,
+                    terrain_name=stl_config["display_name"],
+                    stl_heightmap_path=stl_config["heightmap_path"],
+                    goal_positions=stl_config.get("goals", None),
+                    real_length_m=stl_config.get("real_length_m", None),
+                    real_width_m=stl_config.get("real_width_m", None)
+                )
+            else:
+                print(f"Warning: BridgeB terrain config not found, using flat terrain")
+                terrain.height_field_raw[:, :] = 0
+        else:
+            # 处理 choice >= 最后一个比例值的情况（例如 choice = 1.0）
+            idx = 24
+            # 从配置映射表中获取 BridgeB 地形配置
+            stl_config = self.STL_TERRAIN_CONFIG.get("BridgeB")
+            if stl_config:
+                stl_heightmap_terrain(
+                    terrain,
+                    terrain_name=stl_config["display_name"],
+                    stl_heightmap_path=stl_config["heightmap_path"],
+                    goal_positions=stl_config.get("goals", None),
+                    real_length_m=stl_config.get("real_length_m", None),
+                    real_width_m=stl_config.get("real_width_m", None)
+                )
+            else:
+                print(f"Warning: BridgeB terrain config not found, using flat terrain")
+                terrain.height_field_raw[:, :] = 0
         # np.set_printoptions(precision=2)
         # print(np.array(self.proportions), choice)
         terrain.idx = idx
@@ -334,7 +535,16 @@ class Terrain:
         end_x = self.border + (i + 1) * self.length_per_env_pixels
         start_y = self.border + j * self.width_per_env_pixels
         end_y = self.border + (j + 1) * self.width_per_env_pixels
+
+        print(f"Adding terrain to map: row={i}, col={j}")
+        print(f"  Sub-terrain shape: {terrain.height_field_raw.shape}")
+        print(f"  Sub-terrain min/max: {terrain.height_field_raw.min()}/{terrain.height_field_raw.max()}")
+        print(f"  Map position: x=[{start_x}:{end_x}], y=[{start_y}:{end_y}]")
+        print(f"  Global shape: {self.height_field_raw.shape}")
+
         self.height_field_raw[start_x: end_x, start_y:end_y] = terrain.height_field_raw
+
+        print(f"  After copy, global min/max: {self.height_field_raw.min()}/{self.height_field_raw.max()}")
 
         # env_origin_x = (i + 0.5) * self.env_length
         env_origin_x = i * self.env_length + 1.0
@@ -349,7 +559,9 @@ class Terrain:
             env_origin_z = np.max(terrain.height_field_raw[x1:x2, y1:y2])*terrain.vertical_scale
         self.env_origins[i, j] = [env_origin_x, env_origin_y, env_origin_z]
         self.terrain_type[i, j] = terrain.idx
-        self.goals[i, j, :, :2] = terrain.goals + [i * self.env_length, j * self.env_width]
+        # 检查 terrain 是否有 goals 属性
+        if hasattr(terrain, 'goals'):
+            self.goals[i, j, :, :2] = terrain.goals + [i * self.env_length, j * self.env_width]
         # self.env_slope_vec[i, j] = terrain.slope_vector
 
 def gap_terrain(terrain, gap_size, platform_size=1.):
@@ -869,6 +1081,137 @@ def stepping_stones_terrain(terrain, stone_size, stone_distance, max_height, pla
     terrain.height_field_raw[x1:x2, y1:y2] = 0
     return terrain
 
+def stl_heightmap_terrain(terrain,
+                          terrain_name="custom_stl",
+                          stl_heightmap_path="legged_gym/terrain_assets/heightmap.npy",
+                          goal_positions=None,
+                          pad_width=0.1,
+                          pad_height=0.0,
+                          real_length_m=None,
+                          real_width_m=None,
+                          align_bottom=True):
+    """
+    从预生成的 heightmap 加载 STL 地形。
+    如果提供 real_length_m/real_width_m，则在大画布平地上按真实尺寸居中放置地形；
+    否则保持原来的整张铺满逻辑。
+    """
+    scale_factor_height = 1.0
+    scale_factor_width = 1.0
+    offset_height = 0.0
+    offset_width = 0.0
+
+    try:
+        if not os.path.isabs(stl_heightmap_path):
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
+            abs_path = os.path.join(project_root, stl_heightmap_path)
+        else:
+            abs_path = stl_heightmap_path
+
+        heightmap = np.load(abs_path).astype(np.float32)
+        if terrain_name == "T_step":
+            heightmap = np.rot90(heightmap, 2)
+
+        original_heightmap_shape = heightmap.shape
+        if align_bottom:
+            heightmap = heightmap - float(heightmap.min())
+
+        target_height = terrain.height_field_raw.shape[0]
+        target_width = terrain.height_field_raw.shape[1]
+
+        from scipy import ndimage
+
+        if real_length_m is not None and real_width_m is not None:
+            desired_height = max(1, int(round(real_length_m / terrain.horizontal_scale)))
+            desired_width = max(1, int(round(real_width_m / terrain.horizontal_scale)))
+            scale_factor_height = desired_height / heightmap.shape[0] if heightmap.shape[0] > 0 else 1.0
+            scale_factor_width = desired_width / heightmap.shape[1] if heightmap.shape[1] > 0 else 1.0
+
+            if heightmap.shape != (desired_height, desired_width):
+                heightmap = ndimage.zoom(heightmap, (scale_factor_height, scale_factor_width), order=1)
+
+            height_field_raw = (heightmap / terrain.vertical_scale).astype(np.int16)
+            terrain.height_field_raw[:, :] = 0
+
+            place_height = min(target_height, height_field_raw.shape[0])
+            place_width = min(target_width, height_field_raw.shape[1])
+            src_x0 = max(0, (height_field_raw.shape[0] - place_height) // 2)
+            src_y0 = max(0, (height_field_raw.shape[1] - place_width) // 2)
+            dst_x0 = max(0, (target_height - place_height) // 2)
+            dst_y0 = max(0, (target_width - place_width) // 2)
+            dst_x1 = dst_x0 + place_height
+            dst_y1 = dst_y0 + place_width
+
+            terrain.height_field_raw[dst_x0:dst_x1, dst_y0:dst_y1] = height_field_raw[src_x0:src_x0 + place_height, src_y0:src_y0 + place_width]
+            offset_height = float(dst_x0)
+            offset_width = float(dst_y0)
+            print(f"[{terrain_name}] Placed STL heightmap on flat terrain: size=({real_length_m:.3f}m, {real_width_m:.3f}m), grid={height_field_raw.shape}, offset=({dst_x0}, {dst_y0})")
+        else:
+            scale_factor_height = target_height / heightmap.shape[0] if heightmap.shape[0] > 0 else 1.0
+            scale_factor_width = target_width / heightmap.shape[1] if heightmap.shape[1] > 0 else 1.0
+            if heightmap.shape[0] != target_height or heightmap.shape[1] != target_width:
+                print(f"[{terrain_name}] Warning: Heightmap size {heightmap.shape} does not match terrain size {target_height} x {target_width}")
+                print(f"[{terrain_name}] Resizing heightmap to match terrain size...")
+                print(f"[{terrain_name}] Scale factors: height={scale_factor_height:.3f}, width={scale_factor_width:.3f}")
+                heightmap = ndimage.zoom(heightmap, (scale_factor_height, scale_factor_width), order=1)
+                print(f"[{terrain_name}] Resized heightmap shape: {heightmap.shape}")
+            else:
+                print(f"[{terrain_name}] Heightmap size matches terrain size: {heightmap.shape}")
+
+            height_field_raw = (heightmap / terrain.vertical_scale).astype(np.int16)
+            if height_field_raw.shape != terrain.height_field_raw.shape:
+                terrain_h, terrain_w = terrain.height_field_raw.shape
+                heightmap_h, heightmap_w = height_field_raw.shape
+                if heightmap_h > terrain_h:
+                    height_field_raw = height_field_raw[:terrain_h, :]
+                elif heightmap_h < terrain_h:
+                    padding = np.zeros((terrain_h - heightmap_h, heightmap_w), dtype=np.int16)
+                    height_field_raw = np.vstack([padding, height_field_raw])
+                heightmap_h, heightmap_w = height_field_raw.shape
+                if heightmap_w > terrain_w:
+                    height_field_raw = height_field_raw[:, :terrain_w]
+                elif heightmap_w < terrain_w:
+                    padding = np.zeros((heightmap_h, terrain_w - heightmap_w), dtype=np.int16)
+                    height_field_raw = np.hstack([padding, height_field_raw])
+            terrain.height_field_raw[:, :] = height_field_raw
+
+        print(f"[{terrain_name}] Loaded STL heightmap: {original_heightmap_shape}, range: [{heightmap.min():.3f}, {heightmap.max():.3f}] meters")
+
+    except FileNotFoundError:
+        print(f"[{terrain_name}] Warning: Heightmap file not found at {stl_heightmap_path}")
+        print(f"[{terrain_name}] Using flat terrain as fallback")
+        terrain.height_field_raw[:, :] = 0
+    except Exception as e:
+        print(f"[{terrain_name}] Error loading heightmap: {e}")
+        print(f"[{terrain_name}] Using flat terrain as fallback")
+        terrain.height_field_raw[:, :] = 0
+
+    pad_width_int = int(pad_width / terrain.horizontal_scale)
+    pad_height_int = int(pad_height / terrain.vertical_scale)
+    terrain.height_field_raw[:, :pad_width_int] = pad_height_int
+    terrain.height_field_raw[:, -pad_width_int:] = pad_height_int
+    terrain.height_field_raw[:pad_width_int, :] = pad_height_int
+    terrain.height_field_raw[-pad_width_int:, :] = pad_height_int
+
+    if goal_positions is not None:
+        if not isinstance(goal_positions, np.ndarray):
+            goal_positions = np.array(goal_positions, dtype=np.float32)
+        if goal_positions.ndim == 1:
+            goal_positions = goal_positions.reshape(1, -1)
+
+        goal_positions_scaled = goal_positions.copy()
+        goal_positions_scaled[:, 0] *= scale_factor_height
+        goal_positions_scaled[:, 1] *= scale_factor_width
+        goal_positions_scaled[:, 0] += offset_height
+        goal_positions_scaled[:, 1] += offset_width
+        terrain.goals = goal_positions_scaled * terrain.horizontal_scale
+        print(f"[{terrain_name}] Set {len(goal_positions)} goal positions from heightmap coordinates")
+        print(f"[{terrain_name}] Original goal coords: {goal_positions}")
+        print(f"[{terrain_name}] Scaled goal coords (terrain grid): {goal_positions_scaled}")
+        print(f"[{terrain_name}] Goals (physical coords in meters): {terrain.goals}")
+
+    return terrain
+
 def convert_heightfield_to_trimesh_delatin(height_field_raw, horizontal_scale, vertical_scale, max_error=0.01):
     mesh = Delatin(np.flip(height_field_raw, axis=1).T, z_scale=vertical_scale, max_error=max_error)
     vertices = np.zeros_like(mesh.vertices)
@@ -941,3 +1284,137 @@ def convert_heightfield_to_trimesh(height_field_raw, horizontal_scale, vertical_
         triangles[start+1:stop:2, 2] = ind3
 
     return vertices, triangles, move_x != 0
+
+
+def load_stl_mesh(stl_path, terrain_size=12.0, center_to_terrain=True):
+    """
+    加载 STL mesh 文件并返回顶点和三角形面
+
+    参数:
+        stl_path: STL 文件路径
+        terrain_size: 地形尺寸 [meters]，用于居中 mesh
+        center_to_terrain: 是否将 mesh 居中到地形中央
+
+    返回:
+        vertices: 顶点数组，shape (N, 3)
+        triangles: 三角形面数组，shape (M, 3)
+    """
+    print(f"正在加载 STL mesh: {stl_path}")
+    
+    # 加载 STL mesh
+    mesh = trimesh.load_mesh(stl_path)
+    
+    # 检查 mesh 是否 watertight
+    if not mesh.is_watertight:
+        print(f"警告: Mesh '{stl_path}' 不是 watertight，可能会有空洞")
+    
+    # 检查单位并自动转换
+    bbox = mesh.bounding_box.bounds
+    bbox_size = bbox[1] - bbox[0]
+    max_dim = np.max(bbox_size)
+    
+    print(f"Mesh bounding box: {bbox}")
+    print(f"Mesh size: {bbox_size}")
+    print(f"Max dimension: {max_dim:.3f} meters")
+    
+    # 如果 max_dim > 100，假设单位是 mm，转换为 meters
+    if max_dim > 100:
+        print("检测到单位可能是 mm，自动转换为 meters")
+        mesh.apply_scale(0.001)
+        bbox = mesh.bounding_box.bounds
+        bbox_size = bbox[1] - bbox[0]
+        max_dim = np.max(bbox_size)
+        print(f"转换后 Mesh bounding box: {bbox}")
+        print(f"转换后 Mesh size: {bbox_size}")
+    
+    # 将 mesh 居中到地形中央
+    if center_to_terrain:
+        mesh_center = mesh.bounding_box.centroid
+        target_center = np.array([terrain_size / 2, terrain_size / 2, 0])
+        translation = target_center - mesh_center
+        mesh.apply_translation(translation)
+        print(f"Mesh 已居中到地形中央: ({target_center[0]:.2f}, {target_center[1]:.2f}, {target_center[2]:.2f})")
+    
+    # 提取顶点和三角形面
+    vertices = mesh.vertices.astype(np.float32)
+    triangles = mesh.faces.astype(np.uint32)
+    
+    print(f"Mesh 加载完成: {vertices.shape[0]} 顶点, {triangles.shape[0]} 三角形面")
+    
+    return vertices, triangles
+
+
+def load_heightmap(heightmap_path, horizontal_scale=0.02, vertical_scale=0.005):
+    """
+    加载预生成的 heightmap.npy 文件
+
+    参数:
+        heightmap_path: heightmap.npy 文件路径
+        horizontal_scale: 水平分辨率 [meters]
+        vertical_scale: 垂直分辨率 [meters]
+
+    返回:
+        height_field_raw: 高度场数组，shape (N, M)，dtype=np.int16
+    """
+    print(f"正在加载 heightmap: {heightmap_path}")
+    
+    # 加载 heightmap
+    heightmap = np.load(heightmap_path)
+    
+    # 转换为 int16 高度场 (乘以 1/vertical_scale)
+    height_field_raw = (heightmap / vertical_scale).astype(np.int16)
+    
+    print(f"Heightmap 加载完成: shape={height_field_raw.shape}")
+    print(f"Heightmap 范围: {heightmap.min():.3f} ~ {heightmap.max():.3f} meters")
+    
+    return height_field_raw
+
+
+def get_heights_from_heightmap(height_field_raw, horizontal_scale, vertical_scale, robot_positions, num_points_per_row, num_points_per_col):
+    """
+    从 heightmap 中采样高度值，用于机器人地形观测
+
+    参数:
+        height_field_raw: 高度场数组，shape (N, M)
+        horizontal_scale: 水平分辨率 [meters]
+        vertical_scale: 垂直分辨率 [meters]
+        robot_positions: 机器人位置数组，shape (num_robots, 3)
+        num_points_per_row: 每行采样点数
+        num_points_per_col: 每列采样点数
+
+    返回:
+        height_samples: 采样的高度值数组，shape (num_robots, num_points)
+    """
+    num_robots = robot_positions.shape[0]
+    num_points = num_points_per_row * num_points_per_col
+    
+    # 计算采样网格
+    grid_x = np.linspace(-1.0, 1.0, num_points_per_col)  # 沿机器人前进方向
+    grid_y = np.linspace(-1.0, 1.0, num_points_per_row)  # 沿机器人左右方向
+    grid_xx, grid_yy = np.meshgrid(grid_x, grid_y)
+    
+    # 转换为实际坐标偏移
+    offsets_x = (grid_xx.flatten() * horizontal_scale).astype(np.float32)
+    offsets_y = (grid_yy.flatten() * horizontal_scale).astype(np.float32)
+    
+    # 初始化高度采样数组
+    height_samples = np.zeros((num_robots, num_points), dtype=np.float32)
+    
+    for i in range(num_robots):
+        # 机器人位置
+        robot_x = robot_positions[i, 0]
+        robot_y = robot_positions[i, 1]
+        
+        # 计算采样点的像素坐标
+        sample_x = ((robot_x + offsets_x) / horizontal_scale).astype(np.int32)
+        sample_y = ((robot_y + offsets_y) / horizontal_scale).astype(np.int32)
+        
+        # 边界检查
+        sample_x = np.clip(sample_x, 0, height_field_raw.shape[0] - 1)
+        sample_y = np.clip(sample_y, 0, height_field_raw.shape[1] - 1)
+        
+        # 采样高度值
+        heights = height_field_raw[sample_x, sample_y] * vertical_scale
+        height_samples[i, :] = heights - robot_positions[i, 2]  # 相对于机器人高度
+    
+    return height_samples
