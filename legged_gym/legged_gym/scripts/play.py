@@ -88,22 +88,19 @@ def play(args):
                                     "large stairs down": 0.,
                                     "parkour": 0.0,
                                     "parkour_hurdle": 0.0,
-                                    "parkour_flat": 0.,
+                                    "parkour_flat": 0.0,
                                     "parkour_step": 0.0,
-                                    "parkour_gap": 0.0, 
+                                    "parkour_gap": 0.0,
                                     "demo": 0.0,
-                                    "T_step_stl": 0.25,
-                                    "Slope": 0.25,
-                                    "BridgeA": 0.25,
-                                    "BridgeB": 0.25,}
+                                    "T_step_stl": 0.0,
+                                    "Slope": 0.0,
+                                    "BridgeA": 0.0,
+                                    "BridgeB": 1.0,}
     
     env_cfg.terrain.terrain_proportions = list(env_cfg.terrain.terrain_dict.values())
     env_cfg.terrain.curriculum = False
     env_cfg.terrain.max_difficulty = True
-    env_cfg.env.include_foot_contacts = False
-    env_cfg.asset.penalize_contacts_on = []
-    env_cfg.asset.terminate_after_contacts_on = []
-    
+
     env_cfg.depth.angle = [0, 1]
     env_cfg.noise.add_noise = True
     env_cfg.domain_rand.randomize_friction = True

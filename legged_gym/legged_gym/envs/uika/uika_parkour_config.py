@@ -3,7 +3,7 @@ from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobot
 
 class UIKAParkourCfg(LeggedRobotCfg):
     class init_state(LeggedRobotCfg.init_state):
-        pos = [0.0, 0.0, 0.35]  # x,y,z [m]
+        pos = [-0.8, 0.5, 0.35]  # x,y,z [m]
         default_joint_angles = {
             'FL_hip_joint': -0.7,
             'FL_thigh_joint': 0.2,
@@ -39,14 +39,11 @@ class UIKAParkourCfg(LeggedRobotCfg):
         action_scale = 0.25
         decimation = 4
 
-    class env(LeggedRobotCfg.env):
-        include_foot_contacts = False
-
     class asset(LeggedRobotCfg.asset):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/uika/urdf/uika.urdf'
         foot_name = 'foot'
-        penalize_contacts_on = []
-        terminate_after_contacts_on = []
+        penalize_contacts_on = ['thigh', 'calf', 'base']
+        terminate_after_contacts_on = ['base']
         self_collisions = 1
         collapse_fixed_joints = False
 

@@ -170,30 +170,30 @@ class LeggedRobotCfg(BaseConfig):
         num_rows= 10 # number of terrain rows (levels)  # spreaded is benifitiall !
         num_cols = 40 # number of terrain cols (types)
         
-        terrain_dict = {"smooth slope": 0., 
+        terrain_dict = {"smooth slope": 0.,
                         "rough slope up": 0.0,
                         "rough slope down": 0.0,
-                        "rough stairs up": 0., 
-                        "rough stairs down": 0., 
-                        "discrete": 0., 
+                        "rough stairs up": 0.,
+                        "rough stairs down": 0.,
+                        "discrete": 0.,
                         "stepping stones": 0.0,
-                        "gaps": 0., 
+                        "gaps": 0.,
                         "smooth flat": 0,
                         "pit": 0.0,
                         "wall": 0.0,
                         "platform": 0.,
-                        "large stairs up": 0.,
+                        "large stairs up": 0.0,
                         "large stairs down": 0.,
-                        "parkour": 0.1,
-                        "parkour_hurdle": 0.1,
-                        "parkour_flat": 0.1,
-                        "parkour_step": 0.1,
-                        "parkour_gap": 0.1,
+                        "parkour": 0.2,
+                        "parkour_hurdle": 0.2,
+                        "parkour_flat": 0.0,
+                        "parkour_step": 0.2,
+                        "parkour_gap": 0.2,
                         "demo": 0.0,
-                        "T_step_stl": 0.1,
-                        "Slope": 0.1,
-                        "BridgeA": 0.2,
-                        "BridgeB": 0.1}
+                        "T_step_stl": 0.0,
+                        "Slope": 0.0,
+                        "BridgeA": 0.0,
+                        "BridgeB": 0.2}
         terrain_proportions = list(terrain_dict.values())
         
         # trimesh only:
@@ -234,7 +234,7 @@ class LeggedRobotCfg(BaseConfig):
         waypoint_delta = 0.7
 
     class init_state:
-        pos = [0.0, 0.0, 1.] # x,y,z [m]
+        pos = [0.0, 0.0, 1.0] # x,y,z [m]
         rot = [0.0, 0.0, 0.0, 1.0] # x,y,z,w [quat]
         lin_vel = [0.0, 0.0, 0.0]  # x,y,z [m/s]
         ang_vel = [0.0, 0.0, 0.0]  # x,y,z [rad/s]

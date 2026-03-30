@@ -243,8 +243,8 @@ class LeggedRobot(BaseTask):
 
         self.roll, self.pitch, self.yaw = euler_from_quaternion(self.base_quat)
 
-        contact = torch.zeros((self.num_envs, len(self.feet_indices)), dtype=torch.bool, device=self.device)
-        self.contact_filt = contact
+        contact = torch.norm(self.contact_forces[:, self.feet_indices], dim=-1) > 2.
+        self.contact_filt = torch.logical_or(contact, self.last_contacts)
         self.last_contacts = contact
         
         # self._update_jump_schedule()
@@ -1244,7 +1244,7 @@ class LeggedRobot(BaseTask):
         return torch.sum(torch.square((self.last_dof_vel - self.dof_vel) / self.dt), dim=1)
 
     def _reward_collision(self):
-        return torch.zeros(self.num_envs, device=self.device)
+        return torch.sum(1.*(torch.norm(self.contact_forces[:, self.penalised_contact_indices, :], dim=-1) > 0.1), dim=1)
 
     def _reward_action_rate(self):
         return torch.norm(self.last_actions - self.actions, dim=1)
@@ -1263,7 +1263,10 @@ class LeggedRobot(BaseTask):
         return dof_error
     
     def _reward_feet_stumble(self):
-        return torch.zeros(self.num_envs, device=self.device)
+        # Penalize feet hitting vertical surfaces
+        rew = torch.any(torch.norm(self.contact_forces[:, self.feet_indices, :2], dim=2) >\
+             4 *torch.abs(self.contact_forces[:, self.feet_indices, 2]), dim=1)
+        return rew.float()
 
     def _reward_feet_edge(self):
         feet_pos_xy = ((self.rigid_body_states[:, self.feet_indices, :2] + self.terrain.cfg.border_size) / self.cfg.terrain.horizontal_scale).round().long()  # (num_envs, 4, 2)

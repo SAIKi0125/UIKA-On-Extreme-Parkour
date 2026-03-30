@@ -75,14 +75,14 @@ class Terrain:
             "display_name": "BridgeA",
             "real_length_m": 5,
             "real_width_m": 5,
-            "goals": [(65,100),(95,100),(125,100),(150,100),(180,100),(210,100),(230,100),(235,140)]
+            "goals": [(20,100),(42,103),(70,103),(95,103),(122,103),(150,103),(190,100),(190,140)]
         },
         "BridgeB": {
             "heightmap_path": "legged_gym/terrain_assets/height_maps/BridgeB.npy",
             "display_name": "BridgeB",
             "real_length_m": 5,
             "real_width_m": 5,
-            "goals": [(70,106),(110,106),(145,106),(155,106),(165,106),(175,106),(185,106),(195,106)]
+            "goals": [(20,106),(50,106),(70,106),(90,106),(110,106),(130,106),(140,150),(140,190)]
         },
         # 添加更多 STL 地形配置示例：
         # "my_custom_terrain": {
@@ -1121,7 +1121,15 @@ def stl_heightmap_terrain(terrain,
         heightmap = np.load(abs_path).astype(np.float32)
         if terrain_name == "T_step":
             heightmap = np.rot90(heightmap, 2)
+        if terrain_name == "Slope":
+            heightmap = np.rot90(heightmap, 2)
 
+        if terrain_name == "BridgeA":
+            heightmap = np.flip(heightmap, axis=1)
+            heightmap = np.rot90(heightmap, 2)
+        if terrain_name == "BridgeB":
+            heightmap = np.flip(heightmap, axis=1)
+            heightmap = np.rot90(heightmap, 2)
         original_heightmap_shape = heightmap.shape
         if align_bottom:
             heightmap = heightmap - float(heightmap.min())
@@ -1223,7 +1231,7 @@ def stl_heightmap_terrain(terrain,
     return terrain
 
 def convert_heightfield_to_trimesh_delatin(height_field_raw, horizontal_scale, vertical_scale, max_error=0.01):
-    mesh = Delatin(np.flip(height_field_raw, axis=1).T, z_scale=vertical_scale, max_error=max_error)
+    mesh = Delatin(np.flip(height_field_raw, axis=2).T, z_scale=vertical_scale, max_error=max_error)
     vertices = np.zeros_like(mesh.vertices)
     vertices[:, :2] = mesh.vertices[:, :2] * horizontal_scale
     vertices[:, 2] = mesh.vertices[:, 2]
