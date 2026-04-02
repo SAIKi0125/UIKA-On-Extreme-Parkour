@@ -28,6 +28,13 @@ conda activate parkour
 requirements/parkour-requirements.txt
 ```
 
+**PyTorch 版本要求：2.4.1**
+
+```bash
+pip install torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1
+pip install trimesh
+```
+
 ## 训练流程
 
 ### 1）先做平地预训练（推荐）
