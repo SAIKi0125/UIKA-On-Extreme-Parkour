@@ -2,7 +2,7 @@
 
 本仓库是在 `extreme-parkour` 基础上，为 UIKA 四足机器人做的适配版本。
 
-## Installation
+## 环境安装
 
 ```bash
 conda create -n parkour python=3.8
@@ -14,7 +14,7 @@ pip install trimesh
 git clone git@github.com:SAIKi0125/UIKA-On-Extreme-Parkour.git
 cd UIKA-On-Extreme-Parkour
 
-# Download Isaac Gym binaries from https://developer.nvidia.com/isaac-gym
+# 从 https://developer.nvidia.com/isaac-gym 下载 Isaac Gym 二进制文件
 cd isaacgym/python && pip install -e .
 cd ../rsl_rl && pip install -e .
 cd ../legged_gym && pip install -e .
@@ -22,7 +22,7 @@ cd ../legged_gym && pip install -e .
 pip install "numpy<1.24" pydelatin wandb tqdm opencv-python ipdb pyfqmr flask
 ```
 
-## Usage
+## 使用方法
 
 ### 环境变量
 
@@ -32,7 +32,7 @@ export LD_PRELOAD=/home/saiki/miniconda3/envs/parkour/lib/libpython3.8.so.1.0
 
 ### 训练
 
-cd legged_gym/scripts
+进入目录：`cd legged_gym/scripts`
 
 平地预训练：
 
@@ -40,7 +40,7 @@ cd legged_gym/scripts
 python train_uika_flat.py --task uika --proj_name parkour_flat --exptid uika-flat-001 --num_envs 2048
 ```
 
-继续在复杂地形训练：
+复杂地形继续训练：
 
 ```bash
 python train.py --task uika --proj_name parkour_flat --exptid uika-rough-001 --resume --resumeid uika-flat-001 --num_envs 2048
@@ -66,16 +66,16 @@ python play_uika_flat.py --task uika --proj_name parkour_flat --exptid uika-flat
 python check_uika_urdf.py --task uika --headless --num_envs 1
 ```
 
-## Viewer Usage
+## Viewer 使用方法
 
-IsaacGym 和 Web viewer 均可用。
+IsaacGym 和 Web viewer 均支持。
 
-- `ALT + Mouse Left + Drag`: 移动视角
-- `[]`: 切换上一个/下一个机器人
-- `Space`: 暂停/继续
-- `F`: 切换自由相机和跟随相机
+- `ALT + 鼠标左键 + 拖动`：移动视角
+- `[]`：切换上一个/下一个机器人
+- `Space`：暂停/继续
+- `F`：切换自由相机和跟随相机
 
-## Arguments
+## 命令行参数
 
 | 参数 | 说明 |
 |------|------|
@@ -90,6 +90,8 @@ IsaacGym 和 Web viewer 均可用。
 | `--checkpoint` | 加载的检查点编号，-1 为最新 |
 | `--seed` | 随机种子 |
 | `--no_wandb` | 禁用 wandb 日志 |
+| `--delay` | 添加延迟 |
+| `--use_camera` | 使用相机而非扫描点 |
 | `--web` | 使用 Web viewer（用于无头机器） |
 
 模型日志保存在 `legged_gym/logs/<proj_name>/<exptid>/`
